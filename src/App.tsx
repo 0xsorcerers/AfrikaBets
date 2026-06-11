@@ -1,239 +1,400 @@
-import React, { useState, useEffect } from 'react';
-import { Market, CreateMarketInput } from './types/market';
-import { LandingPage } from './components/LandingPage';
-import { MarketGrid } from './components/MarketGrid';
-import { MarketDetail } from './components/MarketDetail';
-import { CreateMarketModal } from './components/CreateMarketModal';
-import './styles/globals.css';
+import { useEffect, useMemo, useState } from 'react'
+import { Connector } from './tools/utils'
+import {
+  buildBuyTx,
+  buildCreateMarketTransactions,
+  buildSellTx,
+  fallbackMedia,
+  fetchLiveMarkets,
+  fetchMarketDetails,
+  formatTokenAmount,
+  getMarketMeta,
+  getStoredComments,
+  optionShare,
+  saveMarketMeta,
+  saveStoredComment,
+  validateMarketMedia,
+  type LocalMarketMeta,
+  type MarketComment,
+  type MarketDraft,
+  type RainMarket,
+  type RainMarketDetails,
+  type RainRawTransaction,
+} from './lib/rain'
+import './styles/globals.css'
 
-export const App: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<'landing' | 'markets'>('landing');
-  const [markets, setMarkets] = useState<Market[]>([]);
-  const [selectedMarket, setSelectedMarket] = useState<Market | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+type Page = { name: 'home' } | { name: 'market'; id: string }
+type TradeMode = 'buy' | 'sell'
 
-  // Load sample markets from localStorage or create defaults
+const categories = ['All', 'Africa', 'Football', 'Politics', 'Crypto', 'Culture', 'Economy', 'Food', 'AI', 'Climate']
+const blankDraft: MarketDraft = {
+  question: '',
+  description: '',
+  options: ['Yes', 'No'],
+  tags: ['Africa'],
+  mediaUrl: '',
+  mediaType: 'image',
+  endDate: '',
+  liquidity: '10',
+}
+
+function App() {
+  const [page, setPage] = useState<Page>({ name: 'home' })
+  const [markets, setMarkets] = useState<RainMarket[]>([])
+  const [details, setDetails] = useState<Record<string, RainMarketDetails>>({})
+  const [meta, setMeta] = useState<Record<string, LocalMarketMeta>>({})
+  const [query, setQuery] = useState('')
+  const [category, setCategory] = useState('All')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+
   useEffect(() => {
-    const savedMarkets = localStorage.getItem('affrika-bets-markets');
-    if (savedMarkets) {
-      try {
-        const parsed = JSON.parse(savedMarkets);
-        setMarkets(parsed.map((m: any) => ({
-          ...m,
-          createdAt: new Date(m.createdAt),
-          closesAt: new Date(m.closesAt)
-        })));
-      } catch (e) {
-        // Initialize with sample markets if loading fails
-        setMarkets(generateSampleMarkets());
-      }
-    } else {
-      setMarkets(generateSampleMarkets());
-    }
-  }, []);
-
-  // Save markets to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('affrika-bets-markets', JSON.stringify(markets));
-  }, [markets]);
-
-  const generateSampleMarkets = (): Market[] => {
-    return [
-      {
-        id: '1',
-        title: 'Will Bitcoin reach $100k by end of 2025?',
-        description: 'Predict whether Bitcoin will breach the $100,000 mark before December 31, 2025.',
-        category: 'Crypto',
-        backgroundUrl: 'https://images.unsplash.com/photo-1621761191319-c6fb62b337ad?w=500&h=300&fit=crop',
-        backgroundType: 'image',
-        createdAt: new Date(),
-        closesAt: new Date(Date.now() + 120 * 24 * 60 * 60 * 1000),
-        tags: ['Bitcoin', 'Price', 'Year End'],
-        stakes: 15469.9,
-        votes: [],
-        options: [
-          { id: 'opt1', label: 'Yes, $100k+', votes: 45, percentage: 60 },
-          { id: 'opt2', label: 'No, below $100k', votes: 30, percentage: 40 }
-        ],
-        status: 'active',
-        creator: '0x1234...'
-      },
-      {
-        id: '2',
-        title: 'Will Argentina win the 2026 World Cup?',
-        description: 'Predict if Argentina will become champions of the 2026 FIFA World Cup.',
-        category: 'Sports',
-        backgroundUrl: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=500&h=300&fit=crop',
-        backgroundType: 'image',
-        createdAt: new Date(),
-        closesAt: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000),
-        tags: ['Football', 'World Cup', 'Argentina'],
-        stakes: 8756.3,
-        votes: [],
-        options: [
-          { id: 'opt1', label: 'Yes, Argentina wins', votes: 35, percentage: 45 },
-          { id: 'opt2', label: 'No, another team', votes: 43, percentage: 55 }
-        ],
-        status: 'active',
-        creator: '0x5678...'
-      },
-      {
-        id: '3',
-        title: 'Will Ethereum replace Bitcoin as #1 by market cap?',
-        description: 'Predict whether Ethereum will surpass Bitcoin in total market capitalization.',
-        category: 'Crypto',
-        backgroundUrl: 'https://images.unsplash.com/photo-1516398957847-ed0a59c46d75?w=500&h=300&fit=crop',
-        backgroundType: 'image',
-        createdAt: new Date(),
-        closesAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
-        tags: ['Ethereum', 'Market Cap', 'Crypto'],
-        stakes: 52340.8,
-        votes: [],
-        options: [
-          { id: 'opt1', label: 'Yes, ETH #1', votes: 28, percentage: 35 },
-          { id: 'opt2', label: 'No, Bitcoin stays #1', votes: 52, percentage: 65 }
-        ],
-        status: 'active',
-        creator: '0x9abc...'
-      },
-      {
-        id: '4',
-        title: 'African Union Peace Accord by June 2026?',
-        description: 'Will the AU successfully broker a lasting peace agreement in key conflict regions?',
-        category: 'Politics',
-        backgroundUrl: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=500&h=300&fit=crop',
-        backgroundType: 'image',
-        createdAt: new Date(),
-        closesAt: new Date(Date.now() + 150 * 24 * 60 * 60 * 1000),
-        tags: ['Peace', 'Africa', 'Geopolitics'],
-        stakes: 3210.5,
-        votes: [],
-        options: [
-          { id: 'opt1', label: 'Yes, accord reached', votes: 22, percentage: 40 },
-          { id: 'opt2', label: 'No, efforts continue', votes: 33, percentage: 60 }
-        ],
-        status: 'active',
-        creator: '0xdef0...'
-      }
-    ];
-  };
-
-  const handleGetStarted = () => {
-    setCurrentPage('markets');
-  };
-
-  const handleCreateMarket = (marketData: CreateMarketInput) => {
-    const newMarket: Market = {
-      id: Date.now().toString(),
-      ...marketData,
-      createdAt: new Date(),
-      stakes: 0,
-      votes: [],
-      status: 'active',
-      creator: '0xConnectedWallet...',
-      options: marketData.options.map((label, idx) => ({
-        id: `opt-${idx}`,
-        label,
-        votes: 0,
-        percentage: 0
-      }))
-    };
-
-    setMarkets(prev => [newMarket, ...prev]);
-    setShowCreateModal(false);
-  };
-
-  const handleVote = (marketId: string, optionId?: string, amount?: number) => {
-    setMarkets(prev =>
-      prev.map(market => {
-        if (market.id === marketId && optionId && amount) {
-          const newOptions = market.options.map(opt => ({
-            ...opt,
-            votes: opt.id === optionId ? opt.votes + 1 : opt.votes,
-            percentage: opt.id === optionId
-              ? ((opt.votes + 1) / (market.options.reduce((s, o) => s + o.votes, 0) + 1)) * 100
-              : (opt.votes / (market.options.reduce((s, o) => s + o.votes, 0) + 1)) * 100
-          }));
-
-          return {
-            ...market,
-            stakes: market.stakes + amount,
-            votes: [
-              ...market.votes,
-              {
-                id: Date.now().toString(),
-                optionId,
-                voter: '0xUser...',
-                amount,
-                timestamp: new Date()
-              }
-            ],
-            options: newOptions
-          };
-        }
-        return market;
+    setMeta(getMarketMeta())
+    fetchLiveMarkets()
+      .then(setMarkets)
+      .catch((eventError: Error) => {
+        setError(eventError.message)
+        setMarkets(sampleMarkets)
       })
-    );
-  };
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filteredMarkets = useMemo(() => {
+    return markets.filter((market) => {
+      const local = meta[market.id]
+      const haystack = `${market.title} ${local?.description || ''} ${local?.tags.join(' ') || ''}`.toLowerCase()
+      const matchesQuery = haystack.includes(query.toLowerCase())
+      const matchesCategory = category === 'All' || local?.tags.some((tag) => tag.toLowerCase() === category.toLowerCase()) || haystack.includes(category.toLowerCase())
+      return matchesQuery && matchesCategory
+    })
+  }, [category, markets, meta, query])
+
+  const selectedMarket = page.name === 'market' ? markets.find((market) => market.id === page.id) : undefined
+
+  function handleCreated(draft: MarketDraft) {
+    const optimisticId = `local-${crypto.randomUUID()}`
+    const localMarket: RainMarket = {
+      id: optimisticId,
+      title: draft.question,
+      totalVolume: draft.liquidity,
+      status: 'New',
+    }
+    const localMeta: LocalMarketMeta = {
+      id: optimisticId,
+      description: draft.description,
+      tags: draft.tags,
+      mediaUrl: draft.mediaUrl,
+      mediaType: draft.mediaType,
+      createdAt: Date.now(),
+      comments: [],
+    }
+    saveMarketMeta(localMeta)
+    setMarkets((current) => [localMarket, ...current])
+    setMeta((current) => ({ ...current, [optimisticId]: localMeta }))
+    setCreateOpen(false)
+  }
+
+  if (page.name === 'market' && selectedMarket) {
+    return (
+      <MarketPage
+        market={selectedMarket}
+        details={details[selectedMarket.id]}
+        localMeta={meta[selectedMarket.id]}
+        onBack={() => setPage({ name: 'home' })}
+        onNeedDetails={async () => {
+          if (!details[selectedMarket.id] && !selectedMarket.id.startsWith('local-')) {
+            const marketDetails = await fetchMarketDetails(selectedMarket.id)
+            setDetails((current) => ({ ...current, [selectedMarket.id]: marketDetails }))
+          }
+        }}
+      />
+    )
+  }
 
   return (
-    <div className="app">
-      {currentPage === 'landing' ? (
-        <LandingPage onGetStarted={handleGetStarted} />
-      ) : (
-        <>
-          <MarketGrid
-            markets={markets}
-            onVote={(marketId) => {
-              const market = markets.find(m => m.id === marketId);
-              if (market) setSelectedMarket(market);
-            }}
-            onSelectMarket={setSelectedMarket}
-            onCreateMarket={() => setShowCreateModal(true)}
-          />
+    <main className="app-shell">
+      <header className="topbar glass-panel">
+        <button className="brand" onClick={() => setPage({ name: 'home' })} type="button">
+          <span className="brand-mark">AB</span>
+          <span>AfrikaBets</span>
+        </button>
+        <nav className="desktop-nav">
+          <a href="#markets">Markets</a>
+          <a href="#create">Create</a>
+          <a href="#learn">Rain SDK</a>
+        </nav>
+        <Connector className="wallet-button" />
+      </header>
 
-          {selectedMarket && (
-            <MarketDetail
-              market={selectedMarket}
-              onVote={(optionId, amount) => {
-                handleVote(selectedMarket.id, optionId, amount);
-                setMarkets(prev =>
-                  prev.map(m =>
-                    m.id === selectedMarket.id
-                      ? {
-                          ...m,
-                          options: m.options.map(opt => ({
-                            ...opt,
-                            votes: opt.id === optionId ? opt.votes + 1 : opt.votes
-                          })),
-                          votes: [
-                            ...m.votes,
-                            {
-                              id: Date.now().toString(),
-                              optionId,
-                              voter: '0xUser...',
-                              amount,
-                              timestamp: new Date()
-                            }
-                          ],
-                          stakes: m.stakes + amount
-                        }
-                      : m
-                  )
-                );
-              }}
-              onClose={() => setSelectedMarket(null)}
-            />
-          )}
+      <section className="hero-section">
+        <div className="hero-copy">
+          <span className="eyebrow">Arbitrum prediction markets for African stories</span>
+          <h1>Trade the outcomes everyone is already debating.</h1>
+          <p>
+            AfrikaBets uses Rain SDK market primitives, Arbitrum settlement, and expressive media-backed cards so every market feels like a story worth watching.
+          </p>
+          <div className="hero-actions">
+            <button className="primary-action" onClick={() => setCreateOpen(true)} type="button">Create a market</button>
+            <a className="secondary-action" href="#markets">Explore live markets</a>
+          </div>
+        </div>
+        <div className="hero-card glass-panel">
+          <span className="live-dot">Live market pulse</span>
+          <h2>AFCON, currencies, elections, music, food, crypto—priced by the crowd.</h2>
+          <div className="pulse-grid">
+            <strong>24</strong><span>featured markets</span>
+            <strong>$2.4M</strong><span>sample volume</span>
+            <strong>5MB</strong><span>media cap</span>
+          </div>
+        </div>
+      </section>
 
-          {showCreateModal && (
-            <CreateMarketModal
-              onCreate={handleCreateMarket}
-              onClose={() => setShowCreateModal(false)}
-            />
-          )}
-        </>
+      <section className="market-toolbar glass-panel" id="markets">
+        <label className="search-box">
+          <span>⌕</span>
+          <input placeholder="Search markets, tags, countries..." value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+        <button className="create-pill" onClick={() => setCreateOpen(true)} type="button">+ New market</button>
+      </section>
+
+      <div className="category-row" aria-label="Market categories">
+        {categories.map((item) => (
+          <button className={item === category ? 'chip active' : 'chip'} key={item} onClick={() => setCategory(item)} type="button">
+            {item}
+          </button>
+        ))}
+      </div>
+
+      {error && <p className="status-note">Rain API fallback active: {error}</p>}
+      {loading ? <p className="status-note">Loading Rain markets…</p> : null}
+
+      <section className="market-grid">
+        {filteredMarkets.map((market, index) => (
+          <MarketCard key={market.id} market={market} localMeta={meta[market.id]} index={index} onOpen={() => setPage({ name: 'market', id: market.id })} />
+        ))}
+      </section>
+
+      <section className="learn-panel glass-panel" id="learn">
+        <div>
+          <span className="eyebrow">Built from scratch</span>
+          <h2>Rain SDK inside, AfrikaBets interface outside.</h2>
+        </div>
+        <p>
+          The app fetches public markets, builds create/buy/sell raw transactions, and keeps user-provided market media metadata locally for a fast prototype experience.
+        </p>
+      </section>
+
+      {createOpen && <CreateMarketDialog onClose={() => setCreateOpen(false)} onCreated={handleCreated} />}
+    </main>
+  )
+}
+
+function MarketCard({ market, localMeta, index, onOpen }: { market: RainMarket; localMeta?: LocalMarketMeta; index: number; onOpen: () => void }) {
+  const media = localMeta ? { url: localMeta.mediaUrl, type: localMeta.mediaType } : fallbackMedia(index)
+  const tags = localMeta?.tags || ['Africa', market.status, index % 2 ? 'Culture' : 'Markets']
+  const yes = 34 + ((index * 13) % 45)
+
+  return (
+    <article className="market-card" onClick={onOpen} tabIndex={0} role="button" onKeyDown={(event) => event.key === 'Enter' && onOpen()}>
+      <MediaBackdrop media={media} />
+      <div className="card-overlay" />
+      <div className="card-content">
+        <div className="tag-row">{tags.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}</div>
+        <h3>{market.title}</h3>
+        <p>{localMeta?.description || 'Open this market to inspect prices, trade outcomes, and join the conversation.'}</p>
+        <div className="odds-row"><span>Yes {yes}%</span><span>No {100 - yes}%</span></div>
+        <div className="probability"><span style={{ width: `${yes}%` }} /></div>
+        <div className="card-footer">
+          <span>👥 {2 + (index % 9)} votes</span>
+          <span>◎ {formatTokenAmount(market.totalVolume)} USDT staked</span>
+        </div>
+        <button type="button">Trade</button>
+      </div>
+    </article>
+  )
+}
+
+function MarketPage({ market, details, localMeta, onBack, onNeedDetails }: { market: RainMarket; details?: RainMarketDetails; localMeta?: LocalMarketMeta; onBack: () => void; onNeedDetails: () => Promise<void> }) {
+  const [comments, setComments] = useState<MarketComment[]>([])
+  const [comment, setComment] = useState('')
+  const [activeMode, setActiveMode] = useState<TradeMode>('buy')
+  const [tx, setTx] = useState<RainRawTransaction | null>(null)
+  const [tradeError, setTradeError] = useState('')
+  const media = localMeta ? { url: localMeta.mediaUrl, type: localMeta.mediaType } : fallbackMedia(market.title.length)
+  const tags = localMeta?.tags || ['Africa', market.status, 'Rain']
+
+  useEffect(() => {
+    setComments(getStoredComments(market.id))
+    onNeedDetails().catch((eventError: Error) => setTradeError(eventError.message))
+  }, [market.id])
+
+  function addComment() {
+    if (!comment.trim()) return
+    const next = saveStoredComment(market.id, {
+      id: crypto.randomUUID(),
+      author: 'Guest trader',
+      body: comment.trim(),
+      createdAt: Date.now(),
+    })
+    setComments(next)
+    setComment('')
+  }
+
+  return (
+    <main className="detail-page">
+      <MediaBackdrop media={media} />
+      <div className="detail-scrim" />
+      <button className="back-button" onClick={onBack} type="button">← Back</button>
+      <button className="share-button" type="button">⌘</button>
+
+      <section className="detail-hero">
+        <div className="tag-row centered">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
+        <h1>{market.title}</h1>
+        <p>{localMeta?.description || 'Trade this Rain-powered prediction market and compare crowd conviction before the outcome resolves.'}</p>
+        <div className="stake-bar">◎ {details ? formatTokenAmount(details.allFunds, Number(details.baseTokenDecimals)) : formatTokenAmount(market.totalVolume)} staked.</div>
+        <div className="market-meta-row"><span>◷ Created {new Date(localMeta?.createdAt || Date.now()).toLocaleDateString()}</span><span>👥 {details ? details.allVotes.toString() : comments.length + 1} votes</span><span className="live-badge">● {market.status}</span></div>
+      </section>
+
+      <section className="detail-layout">
+        <div className="outcome-panel glass-panel">
+          <h2>Outcomes</h2>
+          {(details?.options || [{ optionName: 'Yes' }, { optionName: 'No' }]).map((option, index) => {
+            const share = optionShare(index === 0 ? 56 : 44, 'currentPrice' in option ? option : undefined)
+            return (
+              <div className="outcome-row" key={option.optionName}>
+                <div><strong>{option.optionName}</strong><span>{share}% implied</span></div>
+                <div className="probability"><span style={{ width: `${share}%` }} /></div>
+              </div>
+            )
+          })}
+        </div>
+        <TradePanel market={market} details={details} activeMode={activeMode} onMode={setActiveMode} onTx={setTx} onError={setTradeError} />
+        <CommentPanel comments={comments} comment={comment} setComment={setComment} addComment={addComment} />
+      </section>
+
+      {(tx || tradeError) && (
+        <aside className="tx-drawer glass-panel">
+          <button type="button" onClick={() => { setTx(null); setTradeError('') }}>×</button>
+          {tradeError ? <p className="error-text">{tradeError}</p> : <pre>{JSON.stringify(tx, (_, value) => (typeof value === 'bigint' ? value.toString() : value), 2)}</pre>}
+        </aside>
       )}
+    </main>
+  )
+}
+
+function TradePanel({ market, details, activeMode, onMode, onTx, onError }: { market: RainMarket; details?: RainMarketDetails; activeMode: TradeMode; onMode: (mode: TradeMode) => void; onTx: (tx: RainRawTransaction) => void; onError: (error: string) => void }) {
+  const [option, setOption] = useState(0)
+  const [amount, setAmount] = useState('5')
+  const [price, setPrice] = useState('0.5')
+  const options = details?.options || [{ choiceIndex: 0, optionName: 'Yes' }, { choiceIndex: 1, optionName: 'No' }]
+
+  function previewTrade() {
+    onError('')
+    const contractAddress = details?.contractAddress || market.contractAddress
+    if (!contractAddress) {
+      onError('Open a live Rain market with a contract address before building trade transactions.')
+      return
+    }
+    const rawTx = activeMode === 'buy' ? buildBuyTx(contractAddress as `0x${string}`, option, amount) : buildSellTx(contractAddress as `0x${string}`, option, price, amount)
+    onTx(rawTx)
+  }
+
+  return (
+    <section className="trade-panel glass-panel">
+      <div className="mode-toggle"><button className={activeMode === 'buy' ? 'active' : ''} onClick={() => onMode('buy')} type="button">Buy</button><button className={activeMode === 'sell' ? 'active' : ''} onClick={() => onMode('sell')} type="button">Sell</button></div>
+      <label>Outcome<select value={option} onChange={(event) => setOption(Number(event.target.value))}>{options.map((item: { optionName: string }, index: number) => <option value={index} key={item.optionName}>{item.optionName}</option>)}</select></label>
+      <label>{activeMode === 'buy' ? 'USDT amount' : 'Shares'}<input value={amount} onChange={(event) => setAmount(event.target.value)} /></label>
+      {activeMode === 'sell' && <label>Price per share<input value={price} onChange={(event) => setPrice(event.target.value)} /></label>}
+      <button className="primary-action full" onClick={previewTrade} type="button">Preview {activeMode} transaction</button>
+    </section>
+  )
+}
+
+function CommentPanel({ comments, comment, setComment, addComment }: { comments: MarketComment[]; comment: string; setComment: (value: string) => void; addComment: () => void }) {
+  return (
+    <section className="comment-panel glass-panel">
+      <h2>Market conversation</h2>
+      <textarea placeholder="Add a thoughtful comment or source…" value={comment} onChange={(event) => setComment(event.target.value)} />
+      <button onClick={addComment} type="button">Post comment</button>
+      <div className="comments-list">
+        {comments.length === 0 ? <p>No comments yet. Start the debate.</p> : comments.map((item) => <article key={item.id}><strong>{item.author}</strong><span>{new Date(item.createdAt).toLocaleString()}</span><p>{item.body}</p></article>)}
+      </div>
+    </section>
+  )
+}
+
+function CreateMarketDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (draft: MarketDraft) => void }) {
+  const [draft, setDraft] = useState(blankDraft)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+
+  function update(field: keyof MarketDraft, value: string) {
+    setDraft((current) => ({ ...current, [field]: value }))
+  }
+
+  async function submit() {
+    setBusy(true)
+    setNotice('')
+    try {
+      const media = await validateMarketMedia(draft.mediaUrl)
+      const normalizedDraft = { ...draft, mediaType: media.mediaType, tags: draft.tags.map(String).filter(Boolean), options: draft.options.filter(Boolean) }
+      if (normalizedDraft.question.length < 8) throw new Error('Write a market question with at least 8 characters.')
+      if (normalizedDraft.options.length < 2) throw new Error('Add at least two outcomes.')
+      setNotice('Media validated. Connect a wallet to build and send Rain create-market transactions; saving this market locally now.')
+      onCreated(normalizedDraft)
+    } catch (eventError) {
+      setNotice(eventError instanceof Error ? eventError.message : 'Unable to create market.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function previewCreateTx() {
+    setBusy(true)
+    try {
+      await validateMarketMedia(draft.mediaUrl)
+      const ethereum = (window as Window & { ethereum?: { request: (args: { method: string }) => Promise<string[]> } }).ethereum
+      const [address] = ethereum ? await ethereum.request({ method: 'eth_requestAccounts' }) : []
+      if (!address) throw new Error('Connect a browser wallet to preview create-market transactions.')
+      const txs = await buildCreateMarketTransactions(draft, address as `0x${string}`)
+      setNotice(JSON.stringify(txs, (_, value) => (typeof value === 'bigint' ? value.toString() : value), 2))
+    } catch (eventError) {
+      setNotice(eventError instanceof Error ? eventError.message : 'Unable to preview transactions.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <section className="create-modal glass-panel" id="create">
+        <button className="close-modal" onClick={onClose} type="button">×</button>
+        <span className="eyebrow">New Rain market</span>
+        <h2>Create an AfrikaBets market</h2>
+        <label>Market question<input value={draft.question} onChange={(event) => update('question', event.target.value)} placeholder="Will Nigeria win the next AFCON?" /></label>
+        <label>Description<textarea value={draft.description} onChange={(event) => update('description', event.target.value)} placeholder="Context, resolution criteria, and sources." /></label>
+        <label>Image, GIF, or MP4 URL (max 5MB)<input value={draft.mediaUrl} onChange={(event) => update('mediaUrl', event.target.value)} placeholder="https://…" /></label>
+        <div className="split-fields"><label>Tags<input value={draft.tags.join(', ')} onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value.split(',').map((tag) => tag.trim()) }))} /></label><label>End date<input type="datetime-local" value={draft.endDate} onChange={(event) => update('endDate', event.target.value)} /></label></div>
+        <div className="split-fields"><label>Outcomes<input value={draft.options.join(', ')} onChange={(event) => setDraft((current) => ({ ...current, options: event.target.value.split(',').map((tag) => tag.trim()) }))} /></label><label>Initial USDT<input value={draft.liquidity} onChange={(event) => update('liquidity', event.target.value)} /></label></div>
+        <div className="modal-actions"><button onClick={submit} disabled={busy} type="button">Save local market</button><button onClick={previewCreateTx} disabled={busy} type="button">Preview Rain txs</button></div>
+        {notice && <pre className="notice-box">{notice}</pre>}
+      </section>
     </div>
-  );
-};
+  )
+}
+
+function MediaBackdrop({ media }: { media: { url: string; type: 'image' | 'video' } }) {
+  return media.type === 'video' ? <video className="media-backdrop" src={media.url} autoPlay muted loop playsInline /> : <img className="media-backdrop" src={media.url} alt="Market media" />
+}
+
+const sampleMarkets: RainMarket[] = [
+  { id: 'sample-afcon', title: 'Can a Nigeria win next AFCON cup?', totalVolume: '15469', status: 'Live' },
+  { id: 'sample-jollof', title: "What's the world's preference, Nigerian or Ghanaian Jollof Rice?", totalVolume: '4690', status: 'Live' },
+  { id: 'sample-currency', title: 'Will the naira strengthen against USD before December?', totalVolume: '9821', status: 'Trading' },
+  { id: 'sample-ai', title: 'Will an African AI startup reach unicorn status this year?', totalVolume: '12500', status: 'Live' },
+  { id: 'sample-music', title: 'Will an Afrobeats artist top Billboard Global 200?', totalVolume: '7380', status: 'Live' },
+  { id: 'sample-election', title: 'Will voter turnout rise in the next Ghana election?', totalVolume: '18800', status: 'Live' },
+]
+
+export default App

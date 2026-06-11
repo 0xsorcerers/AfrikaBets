@@ -174,3 +174,26 @@ h1, h2, h3, p { margin-top: 0; }
   .detail-hero { margin-top: 10px; }
   .outcome-row { grid-template-columns: 1fr; }
 }
+
+.hero-login { display: inline-grid !important; place-items: center !important; }
+.network-panel { display: grid; grid-template-columns: .95fr 1.05fr; gap: 24px; align-items: center; margin: 0 0 24px; padding: 24px; border-radius: 30px; }
+.network-panel h2 { margin-bottom: 10px; font-size: clamp(1.8rem, 4vw, 3rem); line-height: .95; letter-spacing: -.06em; }
+.network-panel p { margin-bottom: 0; color: rgba(255,255,255,.72); line-height: 1.55; }
+.network-actions { display: grid; gap: 16px; justify-items: stretch; }
+.hero-wallet-button { width: 100% !important; min-height: 54px !important; }
+.network-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.network-chip { display: grid; gap: 4px; min-height: 82px; padding: 12px; color: #fff; text-align: left; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: 18px; transition: border-color .2s ease, transform .2s ease, background .2s ease; }
+.network-chip:hover { transform: translateY(-2px); border-color: var(--network-accent); background: rgba(255,255,255,.1); }
+.network-chip.active { border-color: var(--network-accent); box-shadow: 0 0 30px color-mix(in srgb, var(--network-accent) 28%, transparent); }
+.network-chip strong { color: var(--network-accent); }
+.network-chip span { color: rgba(255,255,255,.62); font-size: .78rem; }
+
+@media (max-width: 1080px) {
+  .network-panel { grid-template-columns: 1fr; }
+  .network-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .network-grid { grid-template-columns: 1fr; }
+}
+.network-chip:disabled { cursor: not-allowed; opacity: .62; transform: none; }

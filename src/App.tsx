@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Connector } from './tools/utils'
+import { Connector, WalletNetworkPanel } from './tools/utils'
 import {
   buildBuyTx,
   buildCreateMarketTransactions,
@@ -135,7 +135,8 @@ function App() {
             AfrikaBets uses Rain SDK market primitives, Arbitrum settlement, and expressive media-backed cards so every market feels like a story worth watching.
           </p>
           <div className="hero-actions">
-            <button className="primary-action" onClick={() => setCreateOpen(true)} type="button">Create a market</button>
+            <Connector label="Log in to trade" className="primary-action hero-login" />
+            <button className="secondary-action" onClick={() => setCreateOpen(true)} type="button">Create a market</button>
             <a className="secondary-action" href="#markets">Explore live markets</a>
           </div>
         </div>
@@ -149,6 +150,8 @@ function App() {
           </div>
         </div>
       </section>
+
+      <WalletNetworkPanel />
 
       <section className="market-toolbar glass-panel" id="markets">
         <label className="search-box">
@@ -181,7 +184,7 @@ function App() {
           <h2>Rain SDK inside, AfrikaBets interface outside.</h2>
         </div>
         <p>
-          The app fetches public markets, builds create/buy/sell raw transactions, and keeps user-provided market media metadata locally for a fast prototype experience.
+          The app fetches public markets, builds create/buy/sell raw transactions, and keeps user-provided market media metadata locally for a fast prototype experience. Thirdweb now handles login plus Arbitrum, Base, Optimism, Polygon, and Celo network switching from the shared networkData structure.
         </p>
       </section>
 
